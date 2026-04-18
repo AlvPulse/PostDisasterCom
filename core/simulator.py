@@ -5,7 +5,7 @@ from network.interference import InterferenceModel
 from mobility.mobility import MobilityManager, EnergyModel
 from traffic.traffic import TrafficGenerator
 from entities.entities import User, ServiceUAV, RelayUAV, HQ
-from core.scheduler import DefaultScheduler
+from core.scheduler import ClosestFirstScheduler
 
 class Simulator:
     def __init__(self, config_dict, scheduler=None):
@@ -31,7 +31,7 @@ class Simulator:
             float(self.config['network']['area'][1])
         )
 
-        self.scheduler = scheduler if scheduler else DefaultScheduler(self.config)
+        self.scheduler = scheduler if scheduler else ClosestFirstScheduler(self.config)
 
         self.current_time = 0.0
         self.users = []
@@ -45,6 +45,8 @@ class Simulator:
         self.packets_dropped = 0
         self.packets_generated = 0
         self.delays = []
+        self.user_throughputs = {} # track total bits delivered per user
+        self.user_delays = {} # track per-user delays
 
     def setup_scenario(self, num_service, num_relay):
         # Spawn UAVs
@@ -81,8 +83,12 @@ class Simulator:
 
         # Move UAVs and calculate energy
         for uav in self.service_uavs:
-            # Placeholder: baseline doesn't move them, so action=0 (hover)
-            v = self.mobility.move(uav, 0, float(self.config['simulation']['speed_limits']['service_uav']), self.control_step)
+            # Scheduler provides action or defaults to 0 (hover)
+            # Fetch decision from scheduler apply? Wait, the decision was already evaluated in apply.
+            # To be clean, the environment should process the movements here.
+            # We must expose movements from scheduler.
+            action = self.scheduler.decide().get('movements', {}).get(uav.entity_id, 0)
+            v = self.mobility.move(uav, action, float(self.config['simulation']['speed_limits']['service_uav']), self.control_step)
             self.energy_model.consume_energy(uav, v, self.control_step)
 
         for uav in self.relay_uavs:
@@ -162,11 +168,21 @@ class Simulator:
                     delay = self.current_time - p.creation_time
                     self.delays.append(delay)
 
+                    if p.owner_id not in self.user_throughputs:
+                        self.user_throughputs[p.owner_id] = 0
+                        self.user_delays[p.owner_id] = []
+                    self.user_throughputs[p.owner_id] += p.original_size_bits
+                    self.user_delays[p.owner_id].append(delay)
+
         # Metrics Collection
         q_sizes = []
         for u in self.users: q_sizes.append(len(u.queue))
         for s in self.service_uavs: q_sizes.append(len(s.queue))
         for r in self.relay_uavs: q_sizes.append(len(r.queue))
+
+        # Copy snapshot of positions for animation
+        uav_positions = {u.entity_id: u.position.copy() for u in self.service_uavs}
+        user_positions = {u.entity_id: u.position.copy() for u in self.users}
 
         return {
             'time': self.current_time,
@@ -175,5 +191,7 @@ class Simulator:
             'generated_packets': self.packets_generated,
             'active_users': len(self.users),
             'avg_queue': np.mean(q_sizes) if q_sizes else 0,
-            'peak_queue': np.max(q_sizes) if q_sizes else 0
+            'peak_queue': np.max(q_sizes) if q_sizes else 0,
+            'uav_positions': uav_positions,
+            'user_positions': user_positions
         }

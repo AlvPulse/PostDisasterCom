@@ -35,7 +35,7 @@ class TrafficGenerator:
                 # Minimum size to avoid 0 length
                 size_bits = max(size_bits, 100)
 
-                packet = Packet(self.next_packet_id, size_bits, current_time)
+                packet = Packet(self.next_packet_id, user.entity_id, size_bits, current_time)
                 user.queue.enqueue(packet)
                 self.next_packet_id += 1
         return self.next_packet_id

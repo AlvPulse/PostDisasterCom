@@ -1,8 +1,9 @@
 from collections import deque
 
 class Packet:
-    def __init__(self, packet_id, size_bits, creation_time):
+    def __init__(self, packet_id, owner_id, size_bits, creation_time):
         self.packet_id = packet_id
+        self.owner_id = owner_id
         self.original_size_bits = size_bits
         self.remaining_bits = size_bits
         self.creation_time = creation_time
