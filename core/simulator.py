@@ -5,10 +5,10 @@ from network.interference import InterferenceModel
 from mobility.mobility import MobilityManager, EnergyModel
 from traffic.traffic import TrafficGenerator
 from entities.entities import User, ServiceUAV, RelayUAV, HQ
-from core.scheduler import ClosestFirstScheduler
+from algorithms.plugin import AlgorithmPlugin
 
 class Simulator:
-    def __init__(self, config_dict, scheduler=None):
+    def __init__(self, config_dict, plugin=None):
         self.config = config_dict
         self.timestep = float(self.config['simulation']['timestep'])
         self.control_step = float(self.config['simulation']['control_step'])
@@ -31,7 +31,7 @@ class Simulator:
             float(self.config['network']['area'][1])
         )
 
-        self.scheduler = scheduler if scheduler else ClosestFirstScheduler(self.config)
+        self.plugin = plugin if plugin else AlgorithmPlugin(self.config)
 
         self.current_time = 0.0
         self.users = []
@@ -78,21 +78,20 @@ class Simulator:
             'interference_model': self.interference_model,
             'current_time': self.current_time
         }
-        self.scheduler.observe(state)
-        self.scheduler.apply(self) # Applies associations and movements
+        self.plugin.observe(state)
+        self.plugin.apply(self) # Applies associations
+
+        movements = self.plugin.get_movements()
 
         # Move UAVs and calculate energy
         for uav in self.service_uavs:
-            # Scheduler provides action or defaults to 0 (hover)
-            # Fetch decision from scheduler apply? Wait, the decision was already evaluated in apply.
-            # To be clean, the environment should process the movements here.
-            # We must expose movements from scheduler.
-            action = self.scheduler.decide().get('movements', {}).get(uav.entity_id, 0)
+            action = movements.get(uav.entity_id, 0)
             v = self.mobility.move(uav, action, float(self.config['simulation']['speed_limits']['service_uav']), self.control_step)
             self.energy_model.consume_energy(uav, v, self.control_step)
 
         for uav in self.relay_uavs:
-            v = self.mobility.move(uav, 0, float(self.config['simulation']['speed_limits']['relay_uav']), self.control_step)
+            action = movements.get(uav.entity_id, 0)
+            v = self.mobility.move(uav, action, float(self.config['simulation']['speed_limits']['relay_uav']), self.control_step)
             self.energy_model.consume_energy(uav, v, self.control_step)
 
         # Spawn/expire users
@@ -112,11 +111,11 @@ class Simulator:
             active_users = []
             for uav in self.service_uavs:
                 if uav.assigned_users:
-                    # Pick one user randomly to serve in this 1ms slot (baseline scheduler)
-                    served_user_id = np.random.choice(uav.assigned_users)
-                    user = next((u for u in self.users if u.entity_id == served_user_id), None)
-                    if user and len(user.queue) > 0:
-                        active_users.append(user)
+                    served_user_id = self.plugin.get_active_user(uav, self.users)
+                    if served_user_id is not None:
+                        user = next((u for u in self.users if u.entity_id == served_user_id), None)
+                        if user and len(user.queue) > 0:
+                            active_users.append(user)
 
             # Drain User queues
             for user in active_users:

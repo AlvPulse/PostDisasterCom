@@ -1,0 +1,52 @@
+radio:
+  frequency: 2.4e9
+  bandwidth: 20.0e6
+  noise_figure_dbm_hz: -174
+  tx_power_dbm:
+    user: 20
+    service_uav: 30
+    relay_uav: 33
+    hq: 35
+  antennas:
+    user: 1
+    service_uav: 8
+    relay_uav: 16
+    hq: 32
+  pointing_loss_db: 2.0
+  nullforming_attenuation_db: -25.0
+
+channel:
+  al_hourani:
+    a: 9.61
+    b: 0.16
+  path_loss:
+    los_additional_nlos: 20.0
+    shadowing_std_los: 4.0
+    shadowing_std_nlos: 7.0
+
+network:
+  area: [3000, 3000]
+  heights:
+    user: 0.0
+    service_uav: 120.0
+    relay_uav: 300.0
+    hq: 30.0
+
+traffic:
+  avg_packet_size_bits: 1000000
+  packet_arrival_rate: 2.0
+  target_users: 100
+  user_lifetime: 300
+
+simulation:
+  timestep: 0.001
+  control_step: 1.0
+  grid_resolution: 20.0
+  speed_limits:
+    service_uav: 15.0
+    relay_uav: 20.0
+
+algorithm:
+  scheduler: proportional_fair
+  routing: best_relay
+  mobility: demand_based
