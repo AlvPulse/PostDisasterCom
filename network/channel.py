@@ -14,6 +14,11 @@ class ChannelModel:
         self.std_los = float(config['channel']['path_loss']['shadowing_std_los'])
         self.std_nlos = float(config['channel']['path_loss']['shadowing_std_nlos'])
 
+        self.weather_effects = {'extra_path_loss': 0.0, 'los_prob_multiplier': 1.0}
+
+    def set_weather(self, weather_effects):
+        self.weather_effects = weather_effects
+
     def compute_distance(self, pos1, pos2):
         d_3d = np.linalg.norm(pos1 - pos2)
         d_2d = np.linalg.norm((pos1[:2] - pos2[:2]))
@@ -35,7 +40,13 @@ class ChannelModel:
             theta_deg = np.degrees(theta_rad)
 
         p_los = 1.0 / (1.0 + self.a * np.exp(-self.b * (theta_deg - self.a)))
+        p_los *= self.weather_effects['los_prob_multiplier']
         return np.random.rand() < p_los
+
+    def apply_rayleigh_fading(self):
+        # Rayleigh fading coefficient |h|^2 ~ Exp(1), in dB it's 10*log10(|h|^2)
+        h_sq = np.random.exponential(1.0)
+        return -10 * np.log10(h_sq + 1e-9)
 
     def get_path_loss_a2g(self, pos_ground, pos_uav):
         """Air-to-Ground path loss (User -> Service UAV)."""
@@ -51,7 +62,9 @@ class ChannelModel:
             pl = fspl + self.pl_los_add_nlos
             shadowing = np.random.normal(0, self.std_nlos)
 
-        total_pl_db = pl + shadowing
+        fading = self.apply_rayleigh_fading()
+
+        total_pl_db = pl + shadowing + fading + self.weather_effects['extra_path_loss']
         return total_pl_db, los
 
     def get_path_loss_a2a(self, pos_uav1, pos_uav2):
@@ -61,4 +74,11 @@ class ChannelModel:
 
         # A2A links are mostly LoS. Add minor A2A shadowing
         shadowing = np.random.normal(0, self.std_los / 2.0)
-        return fspl + shadowing
+        fading = self.apply_rayleigh_fading()
+
+        return fspl + shadowing + fading + self.weather_effects['extra_path_loss']
+
+    def get_packet_success_prob(self, sinr_linear, gamma_threshold=1.0):
+        if sinr_linear <= 0:
+            return 0.0
+        return np.exp(-gamma_threshold / sinr_linear)

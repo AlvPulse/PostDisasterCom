@@ -1,11 +1,7 @@
 import numpy as np
 from algorithms.base_algorithm import SchedulingAlgorithm
 
-class ProportionalFairScheduler(SchedulingAlgorithm):
-    def __init__(self):
-        self.avg_rates = {}
-        self.alpha = 0.01
-
+class MaxWeightScheduler(SchedulingAlgorithm):
     def observe(self, state):
         self.users = state['users']
         self.service_uavs = state['service_uavs']
@@ -17,6 +13,7 @@ class ProportionalFairScheduler(SchedulingAlgorithm):
             best_uav = None
             min_dist = float('inf')
             for uav in self.service_uavs:
+                if not getattr(uav, 'is_active', True): continue
                 dist = np.linalg.norm(user.position - uav.position)
                 if dist < min_dist:
                     min_dist = dist
@@ -37,44 +34,24 @@ class ProportionalFairScheduler(SchedulingAlgorithm):
                 assigned_uav.assigned_users.append(user.entity_id)
 
     def get_active_user(self, uav, all_users):
-        """Micro-step scheduling hook for the simulator: Proportional Fair."""
+        """Micro-step scheduling hook for MaxWeight: Rate * Queue Length."""
         if not uav.assigned_users:
             return None
 
         best_user_id = None
-        max_metric = -1.0
-
-        achieved_rates_this_step = {}
+        max_weight = -1.0
 
         for uid in uav.assigned_users:
             user = next((u for u in all_users if u.entity_id == uid), None)
             if user:
-                # Get instantaneous rate R_i(t)
                 sinr = self.interference_model.calculate_uplink_sinr(user, uav, [user])
                 rate = self.interference_model.shannon_capacity_bps(sinr)
-                achieved_rates_this_step[uid] = rate
+                q_len = user.queue.total_bits
 
-                # Get average rate \bar{R}_i(t)
-                avg_rate = self.avg_rates.get(uid, 1e-6) # small value to avoid div-by-zero
+                weight = rate * q_len
 
-                # Further safety
-                if avg_rate < 1e-9:
-                    avg_rate = 1e-9
-
-                pf_metric = rate / avg_rate
-
-                if pf_metric > max_metric:
-                    max_metric = pf_metric
+                if weight > max_weight:
+                    max_weight = weight
                     best_user_id = uid
-
-        # Update exponential average for all assigned users
-        for uid in uav.assigned_users:
-            current_avg = self.avg_rates.get(uid, 0.0)
-
-            if uid == best_user_id:
-                rate = achieved_rates_this_step.get(uid, 0.0)
-                self.avg_rates[uid] = (1 - self.alpha) * current_avg + self.alpha * rate
-            else:
-                self.avg_rates[uid] = (1 - self.alpha) * current_avg
 
         return best_user_id

@@ -27,3 +27,9 @@ class Metrics:
         if generated == 0:
             return 1.0
         return delivered / generated
+
+    @staticmethod
+    def percentile(values, p=5):
+        if not values:
+            return 0.0
+        return np.percentile(values, p)

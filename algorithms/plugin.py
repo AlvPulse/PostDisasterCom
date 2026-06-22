@@ -16,7 +16,11 @@ class AlgorithmPlugin:
         self.mobility_controller = self._load_module('algorithms.mobility', mob_name)
 
     def _load_module(self, base_path, module_name):
-        full_module_name = f"{base_path}.{module_name}"
+        if 'proposed.cl_cbc' in module_name:
+            # Special case for proposed algorithm paths which are nested
+            full_module_name = f"algorithms.{module_name}"
+        else:
+            full_module_name = f"{base_path}.{module_name}"
         module = importlib.import_module(full_module_name)
 
         # Find the class inside the module that inherits from BaseAlgorithm interfaces

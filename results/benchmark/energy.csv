@@ -1,0 +1,4 @@
+time,algorithm,seed,metric_value
+60.0,BaselineStack,0,278403.75399999146
+60.0,BackpressureStack,0,327412.92399999045
+60.0,Proposed_CL_CBC,0,333759.7399999929
