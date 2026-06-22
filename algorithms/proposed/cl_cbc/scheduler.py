@@ -1,10 +1,11 @@
 import numpy as np
 from algorithms.base_algorithm import SchedulingAlgorithm
 
-class ProportionalFairScheduler(SchedulingAlgorithm):
+class CLCBCScheduler(SchedulingAlgorithm):
     def __init__(self):
-        self.avg_rates = {}
-        self.alpha = 0.01
+        self.alpha = 1e-6 # scale rate
+        self.beta = 1.0   # scale queue
+        self.gamma = 1e6  # scale backhaul congestion
 
     def observe(self, state):
         self.users = state['users']
@@ -17,6 +18,7 @@ class ProportionalFairScheduler(SchedulingAlgorithm):
             best_uav = None
             min_dist = float('inf')
             for uav in self.service_uavs:
+                if not getattr(uav, 'is_active', True): continue
                 dist = np.linalg.norm(user.position - uav.position)
                 if dist < min_dist:
                     min_dist = dist
@@ -37,44 +39,27 @@ class ProportionalFairScheduler(SchedulingAlgorithm):
                 assigned_uav.assigned_users.append(user.entity_id)
 
     def get_active_user(self, uav, all_users):
-        """Micro-step scheduling hook for the simulator: Proportional Fair."""
+        """Cross-Layer Congestion Balanced Control Scheduler"""
         if not uav.assigned_users:
             return None
 
         best_user_id = None
-        max_metric = -1.0
+        max_score = -float('inf')
 
-        achieved_rates_this_step = {}
+        # B_u = congestion level of serving UAV backhaul
+        b_u = uav.queue.total_bits / 1e6 # MBits
 
         for uid in uav.assigned_users:
             user = next((u for u in all_users if u.entity_id == uid), None)
             if user:
-                # Get instantaneous rate R_i(t)
                 sinr = self.interference_model.calculate_uplink_sinr(user, uav, [user])
                 rate = self.interference_model.shannon_capacity_bps(sinr)
-                achieved_rates_this_step[uid] = rate
+                q_i = user.queue.total_bits / 1e6 # MBits
 
-                # Get average rate \bar{R}_i(t)
-                avg_rate = self.avg_rates.get(uid, 1e-6) # small value to avoid div-by-zero
+                score = self.alpha * rate + self.beta * q_i - self.gamma * b_u
 
-                # Further safety
-                if avg_rate < 1e-9:
-                    avg_rate = 1e-9
-
-                pf_metric = rate / avg_rate
-
-                if pf_metric > max_metric:
-                    max_metric = pf_metric
+                if score > max_score:
+                    max_score = score
                     best_user_id = uid
-
-        # Update exponential average for all assigned users
-        for uid in uav.assigned_users:
-            current_avg = self.avg_rates.get(uid, 0.0)
-
-            if uid == best_user_id:
-                rate = achieved_rates_this_step.get(uid, 0.0)
-                self.avg_rates[uid] = (1 - self.alpha) * current_avg + self.alpha * rate
-            else:
-                self.avg_rates[uid] = (1 - self.alpha) * current_avg
 
         return best_user_id

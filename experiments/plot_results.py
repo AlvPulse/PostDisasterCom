@@ -3,15 +3,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-def plot_results(results_dir="results", output_dir="results/plots"):
+def plot_results(results_dir="results/benchmark", output_dir="results/benchmark/plots"):
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. Throughput vs Time
     try:
         df_thr = pd.read_csv(os.path.join(results_dir, 'throughput.csv'))
         plt.figure(figsize=(10, 6))
-        sns.lineplot(data=df_thr, x='time', y='metric_value', hue='algorithm')
-        plt.title('Throughput vs Time')
+        sns.lineplot(data=df_thr, x='time', y='metric_value', hue='algorithm', errorbar='ci') # Use CI for multiple seeds
+        plt.title('System Throughput vs Time')
         plt.ylabel('Throughput (Mbps)')
         plt.grid(True)
         plt.savefig(os.path.join(output_dir, 'throughput_vs_time.png'))
@@ -49,7 +49,7 @@ def plot_results(results_dir="results", output_dir="results/plots"):
     try:
         df_eng = pd.read_csv(os.path.join(results_dir, 'energy.csv'))
         plt.figure(figsize=(8, 6))
-        sns.barplot(data=df_eng, x='algorithm', y='metric_value')
+        sns.barplot(data=df_eng, x='algorithm', y='metric_value', errorbar='ci')
         plt.title('Total UAV Energy Consumption')
         plt.ylabel('Energy (Joules)')
         plt.xticks(rotation=45)
@@ -58,6 +58,19 @@ def plot_results(results_dir="results", output_dir="results/plots"):
         plt.close()
     except Exception as e:
         print(f"Failed to plot energy: {e}")
+
+    # 5. Relay Queue Evolution
+    try:
+        df_rq = pd.read_csv(os.path.join(results_dir, 'relay_queue.csv'))
+        plt.figure(figsize=(10, 6))
+        sns.lineplot(data=df_rq, x='time', y='metric_value', hue='algorithm', errorbar='ci')
+        plt.title('Average Relay Queue Size over Time')
+        plt.ylabel('Queue Size (Packets)')
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, 'relay_queue_over_time.png'))
+        plt.close()
+    except Exception as e:
+        print(f"Failed to plot relay queue: {e}")
 
     print(f"Plots generated and saved to {output_dir}")
 
